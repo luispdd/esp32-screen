@@ -1,0 +1,14 @@
+.pio/
+.pioenvs/
+.piolibdeps/
+*.o
+*.elf
+*.bin
+*.hex
+src/credentials.h
+.vscode/
+.idea/
+*.swp
+*.swo
+ESP32-S3-RLCD-4.2-main/
+openspec/

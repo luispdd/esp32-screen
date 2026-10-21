@@ -1,0 +1,261 @@
+openapi: 3.1.0
+info:
+  title: ESP32-Screen To-Do Appliance REST API
+  description: |
+    REST API for managing tasks on the standalone Waveshare ESP32-S3-RLCD-4.2 To-Do appliance.
+    
+    The device serves this API over local Wi-Fi with mDNS enabled at `http://screen.local` (port 80).
+    Every mutation (create, toggle, delete) immediately refreshes the physical reflective LCD screen
+    and persists updates to the onboard MicroSD card.
+    
+    ### Key Operational Guidelines for Clients & Coding Agents:
+    - **Payload Structure**: The `POST /tasks` endpoint **strictly requires a JSON array** of task objects
+      (e.g., `[{"text": "My task"}]`). Sending a single JSON object returns HTTP 400.
+    - **CORS**: All endpoints include `Access-Control-Allow-Origin: *` headers for direct browser integration.
+  version: 1.0.0
+servers:
+  - url: http://screen.local
+    description: Default local mDNS hostname
+  - url: http://{deviceIp}
+    description: Direct IP address connection
+    variables:
+      deviceIp:
+        default: 192.168.1.211
+        description: Local network IP assigned to the ESP32 screen
+
+paths:
+  /tasks:
+    get:
+      summary: Retrieve all tasks
+      description: Returns the full list of both pending and completed tasks stored in the appliance.
+      operationId: getTasks
+      responses:
+        '200':
+          description: A list of all tasks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskItem'
+              example:
+                - id: 1
+                  text: Welcome to ESP32 Screen!
+                  done: true
+                  created_at: Initial
+                - id: 2
+                  text: Wash the dishes
+                  done: false
+                  created_at: '2026-10-21 15:35'
+                - id: 3
+                  text: Watch Pi videos
+                  done: false
+                  created_at: '2026-10-21 15:37'
+
+    post:
+      summary: Add one or more tasks
+      description: |
+        Creates new tasks and appends them to storage, immediately refreshing the physical screen.
+        
+        **Note:** The payload must be a JSON array. Single task objects must be wrapped in `[...]`.
+      operationId: createTasks
+      requestBody:
+        required: true
+        description: A JSON array of task items to create.
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/TaskInput'
+            examples:
+              singleTask:
+                summary: Single task addition
+                value:
+                  - text: Buy groceries
+              batchTasks:
+                summary: Batch task addition
+                value:
+                  - text: Call dentist
+                  - text: Review pull request
+      responses:
+        '201':
+          description: Tasks created successfully. Returns the created task items with assigned IDs and timestamps.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskItem'
+              example:
+                - id: 4
+                  text: Buy groceries
+                  done: false
+                  created_at: '2026-10-21 16:05'
+        '400':
+          description: Bad request (empty body, non-array JSON, empty array, or missing task text).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notAnArray:
+                  summary: Payload was an object instead of array
+                  value:
+                    error: Payload must be a JSON array of tasks
+                emptyArray:
+                  summary: Empty array provided
+                  value:
+                    error: Array must contain at least one task
+                emptyText:
+                  summary: No valid text
+                  value:
+                    error: No valid task text found in array
+
+    options:
+      summary: CORS preflight
+      description: Handles CORS preflight checks for browser-based clients.
+      operationId: optionsTasks
+      responses:
+        '204':
+          description: CORS preflight headers accepted.
+
+  /tasks/{id}/toggle:
+    post:
+      summary: Toggle task completion status
+      description: Inverts the `done` status of the task (`false` -> `true` or `true` -> `false`) and updates the display.
+      operationId: toggleTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique integer ID of the task to toggle.
+          schema:
+            type: integer
+          example: 2
+      responses:
+        '200':
+          description: Task status successfully toggled. Returns the updated task object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskItem'
+              example:
+                id: 2
+                text: Wash the dishes
+                done: true
+                created_at: '2026-10-21 15:35'
+        '400':
+          description: Invalid task ID supplied in URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Invalid task ID
+        '404':
+          description: Task ID not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Task not found
+
+  /tasks/{id}:
+    delete:
+      summary: Delete a task
+      description: Permanently removes a task from storage and refreshes the screen.
+      operationId: deleteTask
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique integer ID of the task to delete.
+          schema:
+            type: integer
+          example: 3
+      responses:
+        '200':
+          description: Task deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+              example:
+                status: deleted
+        '400':
+          description: Invalid task ID supplied in URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Invalid task ID
+        '404':
+          description: Task ID not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Task not found
+
+components:
+  schemas:
+    TaskItem:
+      type: object
+      required:
+        - id
+        - text
+        - done
+        - created_at
+      properties:
+        id:
+          type: integer
+          description: Auto-incrementing unique numeric identifier.
+          example: 1
+        text:
+          type: string
+          description: The text content of the to-do item.
+          example: Buy groceries
+        done:
+          type: boolean
+          description: Completion state (`false` for pending, `true` for completed).
+          example: false
+        created_at:
+          type: string
+          description: Timestamp when the task was created (NTP formatted `YYYY-MM-DD HH:MM` or `Initial`).
+          example: '2026-10-21 15:37'
+
+    TaskInput:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          description: The text description of the task to create.
+          example: Watch Pi videos
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Descriptive error message explaining why the request failed.
+          example: Payload must be a JSON array of tasks
+
+    DeleteResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          description: Confirmation message.
+          example: deleted
