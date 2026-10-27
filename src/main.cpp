@@ -3,6 +3,7 @@
 #include "sensors/battery.h"
 #include "sensors/environment.h"
 #include "storage/task_store.h"
+#include "audio/audio_manager.h"
 #include "display/display_manager.h"
 #include "display/button_handler.h"
 #include "network/wifi_manager.h"
@@ -55,6 +56,9 @@ void setup() {
   EnvironmentSensor::init(PIN_I2C_SDA, PIN_I2C_SCL);
   float initialTemp = 0.0f, initialHumi = 0.0f;
   EnvironmentSensor::read(initialTemp, initialHumi);
+
+  // Initialize audio subsystem (ES8311 codec + PA + I2S)
+  AudioManager::instance().init();
 
   // Initialize storage (SDMMC 1-bit / RAM fallback)
   TaskStore::instance().init();

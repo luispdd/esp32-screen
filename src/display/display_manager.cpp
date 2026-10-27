@@ -1,4 +1,6 @@
 #include "display_manager.h"
+#include "celebration_splash.h"
+#include "../audio/audio_manager.h"
 #include "../config.h"
 #include "../sensors/battery.h"
 #include "../sensors/environment.h"
@@ -17,9 +19,11 @@ DisplayManager::DisplayManager()
   : _lcd(PIN_LCD_CLK, PIN_LCD_MOSI, PIN_LCD_DC, PIN_LCD_CS, PIN_LCD_RST),
     _u8g2(nullptr),
     _currentView(VIEW_PENDING),
+    _previousView(VIEW_PENDING),
     _selectedIndex(0),
     _lastRenderMs(0),
-    _lastMinute(99) {
+    _lastMinute(99),
+    _celebrationStartMs(0) {
 }
 
 void DisplayManager::init() {
@@ -85,9 +89,17 @@ void DisplayManager::toggleCurrentTask() {
   }
 
   uint32_t targetId = tasks[_selectedIndex].id;
+  bool isCompleting = !tasks[_selectedIndex].done;
+
   store.toggleTask(targetId);
 
-  // Read updated list to bound selectedIndex
+  // If completing a task from the pending list via physical button, celebrate!
+  if (isCompleting) {
+    triggerCelebration();
+    return;
+  }
+
+  // Read updated list to bound selectedIndex for un-completing
   std::vector<TaskItem> updatedTasks = (_currentView == VIEW_PENDING) 
                                        ? store.getPendingTasks() 
                                        : store.getCompletedTasks();
@@ -95,6 +107,23 @@ void DisplayManager::toggleCurrentTask() {
     _selectedIndex = updatedTasks.empty() ? 0 : (int)updatedTasks.size() - 1;
   }
   update(true);
+}
+
+void DisplayManager::triggerCelebration() {
+  ESP_LOGI(TAG, "Entering celebration mode for %d ms", CELEBRATION_DURATION_MS);
+  _previousView = _currentView;
+  _currentView = VIEW_CELEBRATION;
+  _celebrationStartMs = millis();
+
+  // 1. Trigger asynchronous 8-bit chiptune audio fanfare
+  AudioManager::instance().playCelebration();
+
+  // 2. Force immediate rendering of celebration splash illustration
+  update(true);
+}
+
+bool DisplayManager::isCelebrationActive() const {
+  return (_currentView == VIEW_CELEBRATION);
 }
 
 ScreenView DisplayManager::currentView() const {
@@ -258,6 +287,30 @@ void DisplayManager::drawFooter() {
 void DisplayManager::update(bool force) {
   uint32_t now = millis();
   auto &store = TaskStore::instance();
+
+  // Handle active celebration mode timing and rendering
+  if (_currentView == VIEW_CELEBRATION) {
+    if (now - _celebrationStartMs >= CELEBRATION_DURATION_MS) {
+      ESP_LOGI(TAG, "Celebration duration finished (%d ms), returning to %s view",
+               CELEBRATION_DURATION_MS, (_previousView == VIEW_PENDING) ? "Pending" : "Completed");
+      _currentView = _previousView;
+
+      // Re-bound selected index if pending tasks shrank
+      std::vector<TaskItem> tasks = (_currentView == VIEW_PENDING) 
+                                    ? store.getPendingTasks() 
+                                    : store.getCompletedTasks();
+      if (_selectedIndex >= (int)tasks.size()) {
+        _selectedIndex = tasks.empty() ? 0 : (int)tasks.size() - 1;
+      }
+      force = true; // Force redraw of restored view
+    } else {
+      if (force) {
+        CelebrationSplash::draw(_u8g2);
+        _u8g2->sendBuffer();
+      }
+      return;
+    }
+  }
 
   struct tm timeinfo;
   bool hasTime = getLocalTime(&timeinfo, 0);

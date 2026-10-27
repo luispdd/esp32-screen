@@ -57,6 +57,16 @@
 // Battery Monitoring ADC (ADC1 Channel 3)
 #define PIN_BATTERY_ADC    4
 
+// ES8311 I2C & Audio Power Amplifier
+#define ES8311_I2C_ADDR    0x18
+#define PIN_AUDIO_PA       46
+
+// I2S Bus (ES8311 Audio Codec)
+#define PIN_I2S_MCLK       16
+#define PIN_I2S_BCLK       9
+#define PIN_I2S_WS         45
+#define PIN_I2S_DOUT       8
+
 // ==========================================
 // Network & Server Settings
 // ==========================================
@@ -71,3 +81,13 @@
 #define BUTTON_DEBOUNCE_MS 50
 #define BUTTON_LONG_PRESS_MS 600
 #define VISIBLE_TASK_ROWS  6
+
+// ==========================================
+// Celebration Feedback Settings
+// ==========================================
+#define CELEBRATION_DURATION_MS 3000
+#define CELEBRATION_VOLUME      70
+#define CELEBRATION_IMAGE_DIR   "/images"
+#define CELEBRATION_IMAGE_PATH  "/images/celebrate.bmp"
+
+

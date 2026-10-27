@@ -22,6 +22,13 @@ void ButtonHandler::init() {
 }
 
 void ButtonHandler::poll() {
+  // Lock out and discard all button inputs while celebration mode is active
+  if (DisplayManager::instance().isCelebrationActive()) {
+    s_btnKey.isPressed = false;
+    s_btnBoot.isPressed = false;
+    return;
+  }
+
   uint32_t now = millis();
 
   // 1. Process KEY Button (Active LOW)
